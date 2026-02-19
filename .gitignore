@@ -1,0 +1,26 @@
+# --- Security ---
+# Never upload your API keys!
+.env
+
+# --- Python ---
+# Exclude the virtual environment (others will create their own)
+venv/
+.venv/
+env/
+
+# Exclude compiled Python files (speed up folders)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# --- PyCharm/IntelliJ ---
+# Exclude IDE-specific settings (local history, tasks, etc.)
+.idea/
+*.iml
+.vscode/
+
+# --- Operating System ---
+# Local system files
+.DS_Store
+Thumbs.db
