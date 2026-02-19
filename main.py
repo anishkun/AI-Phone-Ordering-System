@@ -1,9 +1,11 @@
 import os
+import json
 from typing import Annotated, TypedDict
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response
 from twilio.twiml.voice_response import VoiceResponse
+from twilio.rest import Client  # Required to modify live calls during handoff
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
@@ -35,15 +37,15 @@ MENU_DB = {
 }
 
 
-# --- 4. THE CUSTOM STATE (Updated with Handoff Flag) ---
+# --- 4. THE CUSTOM STATE ---
 class AgentState(TypedDict):
     messages: Annotated[list, add_messages]
     cart: list
     order_total: float
-    requires_handoff: bool  # NEW: Tracks if the user needs a human
+    requires_handoff: bool
 
 
-# --- 5. THE TOOLS (Now we have THREE tools) ---
+# --- 5. THE TOOLS ---
 @tool
 def search_menu(query: str):
     """Use this tool to search the menu database BEFORE adding an item to the cart."""
@@ -97,7 +99,6 @@ def execute_tools(state: AgentState):
 
     for tool_call in last_message.tool_calls:
 
-        # --- NEW LOGIC: Human Handoff Node ---
         if tool_call["name"] == "request_human_handoff":
             requires_handoff = True
             tool_messages.append(ToolMessage(
@@ -142,7 +143,6 @@ def execute_tools(state: AgentState):
                 tool_call_id=tool_call["id"]
             ))
 
-    # Return updated state, including handoff flag
     return {"messages": tool_messages, "cart": cart, "order_total": order_total, "requires_handoff": requires_handoff}
 
 
@@ -165,79 +165,131 @@ workflow.add_edge("execute_tools", "agent")
 memory = MemorySaver()
 app_graph = workflow.compile(checkpointer=memory)
 
-# --- 8. FASTAPI SERVER ---
+# --- 8. FASTAPI SERVER (NOW USING WEBSOCKETS) ---
 app = FastAPI()
+
+# Required to modify live calls during a stream (for Human Handoff)
+twilio_client = Client(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
 
 
 @app.post("/voice")
 async def voice_handler(request: Request):
-    form_data = await request.form()
-    call_sid = form_data.get("CallSid")
-    user_speech = form_data.get("SpeechResult")
-
-    config = {"configurable": {"thread_id": call_sid}}
+    """
+    Step 1: When the phone rings, we do NOT use <Gather>.
+    We immediately open a WebSocket <Stream>.
+    """
     resp = VoiceResponse()
 
-    if not user_speech:
-        print(f"\n--- New Call Started: {call_sid} ---")
+    # Convert ngrok https:// URL to wss:// for WebSockets
+    host = request.url.hostname
+    wss_url = f"wss://{host}/stream"
 
-        # Initialize requires_handoff to False
-        app_graph.invoke(
-            {
-                "messages": [SystemMessage(content=SYSTEM_PROMPT)],
-                "cart": [],
-                "order_total": 0.0,
-                "requires_handoff": False
-            },
-            config=config
-        )
+    print(f"Incoming call. Connecting to Media Stream at: {wss_url}")
 
-        greeting = "Welcome to DineLine Pizza! What would you like to order today?"
-        app_graph.invoke(
-            {"messages": [{"role": "assistant", "content": greeting}]},
-            config=config
-        )
-
-        resp.say(greeting)
-        resp.gather(input="speech", action="/voice", speechTimeout="auto")
-        return Response(content=str(resp), media_type="application/xml")
-
-    print(f"\nUser said: {user_speech}")
-
-    events = app_graph.invoke(
-        {"messages": [HumanMessage(content=user_speech)]},
-        config=config
-    )
-
-    ai_response = events["messages"][-1].content
-    requires_handoff = events.get("requires_handoff", False)
-
-    print(f"AI replied: {ai_response}")
-    print(f"Current Cart State: {events.get('cart')}")
-    print(f"Handoff Requested: {requires_handoff}")
-
-    # --- NEW LOGIC: Intercept the conversation if handoff is flagged ---
-    if requires_handoff:
-        staff_number = os.getenv("STAFF_PHONE_NUMBER")
-        print(f"Executing Twilio Dial to: {staff_number}")
-
-        resp.say("Please hold while I connect you to a staff member.")
-
-        # The <Dial> verb physically transfers the call in Twilio
-        if staff_number:
-            resp.dial(staff_number)
-        else:
-            resp.say("I'm sorry, I cannot reach a staff member at this time.")
-            resp.hangup()
-
-        return Response(content=str(resp), media_type="application/xml")
-
-    # Existing normal behavior
-    resp.say(ai_response)
-
-    if "goodbye" in ai_response.lower():
-        resp.hangup()
-    else:
-        resp.gather(input="speech", action="/voice", speechTimeout="auto")
+    # Start the bidirectional audio stream
+    connect = resp.connect()
+    connect.stream(url=wss_url)
 
     return Response(content=str(resp), media_type="application/xml")
+
+
+@app.websocket("/stream")
+async def websocket_endpoint(websocket: WebSocket):
+    """
+    Step 2: Twilio streams the raw audio bytes here every 20ms.
+    """
+    await websocket.accept()
+    call_sid = None
+    stream_sid = None
+    config = None
+
+    try:
+        while True:
+            data = await websocket.receive_text()
+            message = json.loads(data)
+
+            # --- EVENT: STREAM STARTED ---
+            if message["event"] == "start":
+                stream_sid = message["start"]["streamSid"]
+                call_sid = message["start"]["callSid"]
+                config = {"configurable": {"thread_id": call_sid}}
+
+                print(f"\n--- [WebSocket] Call Started: {call_sid} ---")
+
+                # Initialize LangGraph State
+                app_graph.invoke(
+                    {
+                        "messages": [SystemMessage(content=SYSTEM_PROMPT)],
+                        "cart": [],
+                        "order_total": 0.0,
+                        "requires_handoff": False
+                    },
+                    config=config
+                )
+
+                greeting = "Welcome to DineLine Pizza! What would you like to order today?"
+                app_graph.invoke({"messages": [{"role": "assistant", "content": greeting}]}, config=config)
+
+                print(f"AI: {greeting}")
+
+                # -----------------------------------------------------------------
+                # REQUIRED INTEGRATION:
+                # You must run `greeting` through a Text-to-Speech API here,
+                # encode the audio to base64 mu-law, and send it to Twilio via:
+                # await websocket.send_text(json.dumps({"event": "media", "streamSid": stream_sid, "media": {"payload": audio_payload}}))
+                # -----------------------------------------------------------------
+
+            # --- EVENT: INCOMING AUDIO FROM CALLER ---
+            elif message["event"] == "media":
+                # The raw audio bytes from the caller (Base64 encoded, 8000Hz, mu-law)
+                inbound_audio_base64 = message["media"]["payload"]
+
+                # -----------------------------------------------------------------
+                # REQUIRED INTEGRATION:
+                # Pipe `inbound_audio_base64` into a real-time Speech-to-Text API
+                # (like Deepgram) here.
+                # -----------------------------------------------------------------
+
+                # ---> PSEUDO-CODE: When your STT API detects the user stopped talking:
+                user_is_done_speaking = False
+                user_speech = ""  # The text returned from your STT API
+
+                if user_is_done_speaking:
+                    print(f"User said: {user_speech}")
+
+                    # Process through LangGraph
+                    events = app_graph.invoke(
+                        {"messages": [HumanMessage(content=user_speech)]},
+                        config=config
+                    )
+
+                    ai_response = events["messages"][-1].content
+                    requires_handoff = events.get("requires_handoff", False)
+
+                    print(f"AI replied: {ai_response}")
+
+                    # Handle Handoff Request over WebSocket
+                    if requires_handoff:
+                        staff_number = os.getenv("STAFF_PHONE_NUMBER")
+                        print(f"Handoff Triggered. Bridging call to: {staff_number}")
+
+                        # Modify the live call using Twilio REST API to stop the stream and dial the staff
+                        twiml_handoff = f'<Response><Say>Connecting you to staff.</Say><Dial>{staff_number}</Dial></Response>'
+                        twilio_client.calls(call_sid).update(twiml=twiml_handoff)
+                        break  # End websocket connection gracefully
+
+                    # -----------------------------------------------------------------
+                    # REQUIRED INTEGRATION:
+                    # If no handoff, run `ai_response` through your Text-to-Speech API
+                    # and send the audio bytes back down the websocket.
+                    # -----------------------------------------------------------------
+
+            # --- EVENT: STREAM STOPPED ---
+            elif message["event"] == "stop":
+                print(f"--- [WebSocket] Stream Ended: {call_sid} ---")
+                break
+
+    except WebSocketDisconnect:
+        print("WebSocket disconnected naturally.")
+    except Exception as e:
+        print(f"WebSocket Error: {e}")
