@@ -4,101 +4,116 @@ from fastapi import FastAPI, Request, Form
 from fastapi.responses import Response
 from twilio.twiml.voice_response import VoiceResponse
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
-# 1. Load Environment Variables (Your API Key)
+# --- LANGGRAPH IMPORTS ---
+from langgraph.graph import StateGraph, START, END, MessagesState
+from langgraph.checkpoint.memory import MemorySaver
+
+# 1. Load Environment Variables
 load_dotenv()
 
 # 2. Setup Google Gemini
-# We use a low temperature (0) so the AI follows instructions strictly.
 llm = ChatGoogleGenerativeAI(
     model="gemini-1.5-flash",
-    temperature=0.3,
+    temperature=0.1,  # Low temperature so it doesn't hallucinate menu items
     google_api_key=os.getenv("GOOGLE_API_KEY")
 )
 
-# 3. Initialize FastAPI App
-app = FastAPI()
-
-# 4. In-Memory Database for Conversation History
-# In a real app, use Redis. Here, a dictionary works for a prototype.
-call_memory = {}
-
-SYSTEM_PROMPT = """
-You are "DineLine", a friendly phone ordering assistant for a Pizza shop.
+# 3. Define the Menu & Rules (This guides the AI)
+SYSTEM_PROMPT = """You are DineLine, an AI phone ordering assistant.
 Your Menu:
-- Pepperoni Pizza ($12)
-- Cheese Pizza ($10)
+- Pepperoni Pizza ($12) - must specify size (Small/Large)
+- Cheese Pizza ($10) - must specify size (Small/Large)
 - Coke ($2)
 
 Rules:
-1. Keep responses short (under 20 words). This is a voice call.
-2. Ask one question at a time.
-3. Once the user is done, summarize the order and say "Goodbye".
-4. If asked for something not on the menu, politely decline.
+1. Keep responses under 20 words. This is a voice call.
+2. If a user orders a pizza, ALWAYS ask what size they want if they didn't specify.
+3. If they ask for something not on the menu, politely decline.
+4. Once they say they are done ordering, summarize the order, give the total price, and say "Goodbye".
+5. Do not use markdown (* or **). Speak in plain text.
 """
+
+
+# --- 4. BUILD THE LANGGRAPH ---
+
+# Node Function: This is the worker that calls the LLM
+def call_model(state: MessagesState):
+    # The LLM looks at the entire history in the state and generates a reply
+    response = llm.invoke(state["messages"])
+    # LangGraph automatically appends this response to the history
+    return {"messages": response}
+
+
+# Create the Graph (The Flowchart)
+workflow = StateGraph(MessagesState)
+workflow.add_node("agent", call_model)
+workflow.add_edge(START, "agent")
+workflow.add_edge("agent", END)
+
+# Initialize MemorySaver to persist history between Twilio requests
+memory = MemorySaver()
+app_graph = workflow.compile(checkpointer=memory)
+
+# --- 5. FASTAPI SERVER ---
+app = FastAPI()
 
 
 @app.post("/voice")
 async def voice_handler(request: Request):
-    """
-    This function is triggered every time the user speaks.
-    Twilio sends the data here.
-    """
-
-    # Parse Form Data from Twilio
     form_data = await request.form()
-    call_sid = form_data.get("CallSid")  # Unique ID for the caller
-    user_speech = form_data.get("SpeechResult")  # The text of what the user said
+    call_sid = form_data.get("CallSid")  # Unique ID for this specific phone call
+    user_speech = form_data.get("SpeechResult")
 
-    # Initialize response object (Twilio Markup Language)
+    # Tell LangGraph to use the CallSid to find the correct memory thread
+    config = {"configurable": {"thread_id": call_sid}}
+
     resp = VoiceResponse()
 
-    # Scenario A: New Call (User hasn't spoken yet)
-    if call_sid not in call_memory:
-        print(f"New Call Started: {call_sid}")
-        # Initialize memory with the System Prompt
-        call_memory[call_sid] = [SystemMessage(content=SYSTEM_PROMPT)]
+    # SCENARIO A: The call just connected (No user speech yet)
+    if not user_speech:
+        print(f"\n--- New Call Started: {call_sid} ---")
 
-        # Greet the user
-        greeting = "Thanks for calling AiPhone Pizza. What can I get for you?"
+        # Inject the System Prompt silently into this call's memory
+        app_graph.invoke(
+            {"messages": [SystemMessage(content=SYSTEM_PROMPT)]},
+            config=config
+        )
+
+        greeting = "Welcome to DineLine Pizza! What would you like to order today?"
+
+        # Add the greeting to memory so the AI knows it already said hello
+        app_graph.invoke(
+            {"messages": [{"role": "assistant", "content": greeting}]},
+            config=config
+        )
+
         resp.say(greeting)
-
-        # Save greeting to history so AI knows it said it
-        call_memory[call_sid].append(AIMessage(content=greeting))
-
-        # Listen for user input
         resp.gather(input="speech", action="/voice", speechTimeout="auto")
         return Response(content=str(resp), media_type="application/xml")
 
-    # Scenario B: Continuing Conversation
-    if user_speech:
-        print(f"User said: {user_speech}")
+    # SCENARIO B: The user spoke
+    print(f"User said: {user_speech}")
 
-        # 1. Add User's speech to memory
-        call_memory[call_sid].append(HumanMessage(content=user_speech))
+    # Send the user's speech into the LangGraph. It remembers everything before this.
+    events = app_graph.invoke(
+        {"messages": [HumanMessage(content=user_speech)]},
+        config=config
+    )
 
-        # 2. Send full history to Gemini to generate next response
-        ai_response = llm.invoke(call_memory[call_sid])
-        ai_text = ai_response.content
+    # Extract the AI's latest reply from the state
+    ai_response = events["messages"][-1].content
+    print(f"AI replied: {ai_response}")
 
-        print(f"AI replied: {ai_text}")
+    # Speak the reply over the phone
+    resp.say(ai_response)
 
-        # 3. Add AI's reply to memory
-        call_memory[call_sid].append(AIMessage(content=ai_text))
+    # Check if the AI ended the conversation
+    if "goodbye" in ai_response.lower():
+        resp.hangup()
+    else:
+        # If not done, listen again
+        resp.gather(input="speech", action="/voice", speechTimeout="auto")
 
-        # 4. Speak the response to the user
-        resp.say(ai_text)
-
-        # 5. Loop back to listen again (unless conversation is over)
-        if "goodbye" in ai_text.lower():
-            resp.hangup()
-        else:
-            resp.gather(input="speech", action="/voice", speechTimeout="auto")
-
-        return Response(content=str(resp), media_type="application/xml")
-
-    # Scenario C: Silence (User didn't say anything)
-    resp.say("I didn't hear anything. Are you still there?")
-    resp.gather(input="speech", action="/voice")
     return Response(content=str(resp), media_type="application/xml")
