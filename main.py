@@ -197,12 +197,13 @@ async def websocket_endpoint(websocket: WebSocket):
                             call_sid = message["start"]["callSid"]
                             config = {"configurable": {"thread_id": call_sid}}
 
-                            # Initialize LangGraph & Greeting
-                            app_graph.invoke(
+                            # FIX 1 APPLIED HERE: Initialize LangGraph & Greeting asynchronously
+                            await app_graph.ainvoke(
                                 {"messages": [SystemMessage(content=SYSTEM_PROMPT)], "cart": [], "order_total": 0.0,
                                  "requires_handoff": False}, config=config)
                             greeting = "Welcome to DineLine Pizza! What would you like to order today?"
-                            app_graph.invoke({"messages": [{"role": "assistant", "content": greeting}]}, config=config)
+                            await app_graph.ainvoke({"messages": [{"role": "assistant", "content": greeting}]},
+                                                    config=config)
 
                             print(f"AI: {greeting}")
                             audio_payload = await generate_tts(greeting)
@@ -226,14 +227,15 @@ async def websocket_endpoint(websocket: WebSocket):
                         dg_response = await deepgram_ws.recv()
                         result = json.loads(dg_response)
 
-                        # If Deepgram detects the end of a sentence (endpointing)
-                        if result.get("is_final") and result.get("channel", {}).get("alternatives", [{}])[0].get(
-                                "transcript"):
+                        # FIX 2 APPLIED HERE: Added speech_final to ensure user finished speaking
+                        if result.get("is_final") and result.get("speech_final") and \
+                                result.get("channel", {}).get("alternatives", [{}])[0].get("transcript"):
                             user_speech = result["channel"]["alternatives"][0]["transcript"]
                             print(f"User said: {user_speech}")
 
-                            # Process through LangGraph
-                            events = app_graph.invoke({"messages": [HumanMessage(content=user_speech)]}, config=config)
+                            # FIX 1 APPLIED HERE: Use await and ainvoke
+                            events = await app_graph.ainvoke({"messages": [HumanMessage(content=user_speech)]},
+                                                             config=config)
                             ai_response = events["messages"][-1].content
                             requires_handoff = events.get("requires_handoff", False)
 
@@ -244,7 +246,9 @@ async def websocket_endpoint(websocket: WebSocket):
                                 staff_number = os.getenv("STAFF_PHONE_NUMBER")
                                 print(f"Handoff Triggered. Bridging call to: {staff_number}")
                                 twiml_handoff = f'<Response><Say>Connecting you to staff.</Say><Dial>{staff_number}</Dial></Response>'
-                                twilio_client.calls(call_sid).update(twiml=twiml_handoff)
+
+                                # FIX 3 APPLIED HERE: Push Twilio HTTP request to a background thread
+                                await asyncio.to_thread(twilio_client.calls(call_sid).update, twiml=twiml_handoff)
                                 break
 
                             # Convert AI text to Speech and send to Twilio
