@@ -22,7 +22,7 @@ load_dotenv()
 
 # --- 1. SETUP & DATABASES ---
 llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash",
+    model="gemini-2.5-flash",  # <--- CHANGE THIS FROM 1.5 TO 2.5
     temperature=0.0,
     google_api_key=os.getenv("GOOGLE_API_KEY")
 )
@@ -66,6 +66,7 @@ def request_human_handoff(reason: str):
 
 llm_with_tools = llm.bind_tools([search_menu, add_to_cart, request_human_handoff])
 
+
 SYSTEM_PROMPT = """You are DineLine, an AI phone ordering assistant.
 Rules:
 1. Keep responses under 20 words.
@@ -73,7 +74,8 @@ Rules:
 3. When the user confirms an order, use the `add_to_cart` tool.
 4. NEVER calculate prices yourself.
 5. If the customer asks for a human, call the `request_human_handoff` tool immediately.
-6. When done, tell them their total and say "Goodbye".
+6. DO NOT say "Goodbye" until the user explicitly says they are finished ordering (e.g., "that's all", "I'm done").
+7. When they are finally done, tell them their total and say "Goodbye".
 """
 
 
