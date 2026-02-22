@@ -1,0 +1,211 @@
+{
+  "restaurant_name": "DineLine Pizza",
+  "menu_items": [
+    {
+      "item_id": "pizza_101",
+      "name": "Pepperoni Pizza",
+      "category": "Pizza",
+      "description": "Classic pizza with our signature tomato sauce, mozzarella, and crispy pepperoni.",
+      "allergens": ["dairy", "gluten"],
+      "is_vegetarian": false,
+      "spice_level": "none",
+      "tags": ["meat", "popular", "pepperoni", "classic"],
+      "variants": [
+        {"variant_id": "pep_small", "name": "Small (10 inch)", "price": 10.00},
+        {"variant_id": "pep_large", "name": "Large (14 inch)", "price": 14.00}
+      ]
+    },
+    {
+      "item_id": "pizza_102",
+      "name": "Classic Cheese Pizza",
+      "category": "Pizza",
+      "description": "Simple and delicious with our homemade tomato sauce and a blend of mozzarella and provolone.",
+      "allergens": ["dairy", "gluten"],
+      "is_vegetarian": true,
+      "spice_level": "none",
+      "tags": ["cheese", "vegetarian", "kids"],
+      "variants": [
+        {"variant_id": "cheese_small", "name": "Small (10 inch)", "price": 8.00},
+        {"variant_id": "cheese_large", "name": "Large (14 inch)", "price": 12.00}
+      ]
+    },
+    {
+      "item_id": "pizza_103",
+      "name": "Margherita Pizza",
+      "category": "Pizza",
+      "description": "Fresh mozzarella, San Marzano tomato sauce, fresh basil, and a drizzle of olive oil.",
+      "allergens": ["dairy", "gluten"],
+      "is_vegetarian": true,
+      "spice_level": "none",
+      "tags": ["vegetarian", "fresh", "italian"],
+      "variants": [
+        {"variant_id": "marg_small", "name": "Small (10 inch)", "price": 11.00},
+        {"variant_id": "marg_large", "name": "Large (14 inch)", "price": 15.00}
+      ]
+    },
+    {
+      "item_id": "pizza_104",
+      "name": "Spicy BBQ Chicken Pizza",
+      "category": "Pizza",
+      "description": "Grilled chicken, red onions, cilantro, mozzarella, and spicy BBQ sauce.",
+      "allergens": ["dairy", "gluten"],
+      "is_vegetarian": false,
+      "spice_level": "medium",
+      "tags": ["chicken", "bbq", "spicy", "popular"],
+      "variants": [
+        {"variant_id": "bbq_small", "name": "Small (10 inch)", "price": 12.00},
+        {"variant_id": "bbq_large", "name": "Large (14 inch)", "price": 16.00}
+      ]
+    },
+    {
+      "item_id": "pizza_105",
+      "name": "Meat Lovers Supreme",
+      "category": "Pizza",
+      "description": "Packed with pepperoni, Italian sausage, bacon, and ground beef.",
+      "allergens": ["dairy", "gluten"],
+      "is_vegetarian": false,
+      "spice_level": "none",
+      "tags": ["meat", "heavy", "beef", "pork"],
+      "variants": [
+        {"variant_id": "meat_small", "name": "Small (10 inch)", "price": 13.00},
+        {"variant_id": "meat_large", "name": "Large (14 inch)", "price": 18.00}
+      ]
+    },
+    {
+      "item_id": "pizza_106",
+      "name": "Veggie Volcano Pizza",
+      "category": "Pizza",
+      "description": "Loaded with bell peppers, onions, mushrooms, black olives, and spicy jalapeños.",
+      "allergens": ["dairy", "gluten"],
+      "is_vegetarian": true,
+      "spice_level": "hot",
+      "tags": ["vegetarian", "spicy", "vegetables"],
+      "variants": [
+        {"variant_id": "veg_vol_small", "name": "Small (10 inch)", "price": 11.00},
+        {"variant_id": "veg_vol_large", "name": "Large (14 inch)", "price": 15.00}
+      ]
+    },
+    {
+      "item_id": "side_201",
+      "name": "Garlic Breadsticks",
+      "category": "Sides",
+      "description": "Oven-baked breadsticks brushed with garlic butter and parmesan.",
+      "allergens": ["dairy", "gluten"],
+      "is_vegetarian": true,
+      "spice_level": "none",
+      "tags": ["side", "garlic", "bread"],
+      "variants": [
+        {"variant_id": "gb_regular", "name": "Order of 6", "price": 5.00}
+      ]
+    },
+    {
+      "item_id": "side_202",
+      "name": "Spicy Buffalo Wings",
+      "category": "Sides",
+      "description": "Crispy chicken wings tossed in our signature hot buffalo sauce. Served with ranch.",
+      "allergens": ["dairy"],
+      "is_vegetarian": false,
+      "spice_level": "hot",
+      "tags": ["wings", "chicken", "spicy", "appetizer"],
+      "variants": [
+        {"variant_id": "wings_6", "name": "6 Pieces", "price": 8.00},
+        {"variant_id": "wings_12", "name": "12 Pieces", "price": 14.00}
+      ]
+    },
+    {
+      "item_id": "side_203",
+      "name": "Mozzarella Sticks",
+      "category": "Sides",
+      "description": "Fried mozzarella cheese sticks served with marinara dipping sauce.",
+      "allergens": ["dairy", "gluten"],
+      "is_vegetarian": true,
+      "spice_level": "none",
+      "tags": ["cheese", "fried", "appetizer"],
+      "variants": [
+        {"variant_id": "mozz_sticks", "name": "Order of 8", "price": 7.00}
+      ]
+    },
+    {
+      "item_id": "salad_301",
+      "name": "Classic Caesar Salad",
+      "category": "Salads",
+      "description": "Romaine lettuce, parmesan cheese, croutons, and Caesar dressing.",
+      "allergens": ["dairy", "gluten", "fish", "egg"],
+      "is_vegetarian": false,
+      "spice_level": "none",
+      "tags": ["salad", "healthy", "greens"],
+      "variants": [
+        {"variant_id": "caesar_side", "name": "Side Salad", "price": 4.50},
+        {"variant_id": "caesar_entree", "name": "Entree Salad", "price": 8.00}
+      ]
+    },
+    {
+      "item_id": "salad_302",
+      "name": "Greek Salad",
+      "category": "Salads",
+      "description": "Mixed greens, cucumbers, tomatoes, red onions, kalamata olives, and feta cheese.",
+      "allergens": ["dairy"],
+      "is_vegetarian": true,
+      "spice_level": "none",
+      "tags": ["salad", "healthy", "vegetarian", "feta"],
+      "variants": [
+        {"variant_id": "greek_side", "name": "Side Salad", "price": 5.00},
+        {"variant_id": "greek_entree", "name": "Entree Salad", "price": 9.00}
+      ]
+    },
+    {
+      "item_id": "bev_401",
+      "name": "Coca-Cola",
+      "category": "Beverages",
+      "description": "Chilled soda.",
+      "allergens": [],
+      "is_vegetarian": true,
+      "spice_level": "none",
+      "tags": ["drink", "soda", "cold"],
+      "variants": [
+        {"variant_id": "coke_can", "name": "12oz Can", "price": 1.50},
+        {"variant_id": "coke_2l", "name": "2 Liter Bottle", "price": 3.50}
+      ]
+    },
+    {
+      "item_id": "bev_402",
+      "name": "Sprite",
+      "category": "Beverages",
+      "description": "Chilled lemon-lime soda.",
+      "allergens": [],
+      "is_vegetarian": true,
+      "spice_level": "none",
+      "tags": ["drink", "soda", "cold"],
+      "variants": [
+        {"variant_id": "sprite_can", "name": "12oz Can", "price": 1.50},
+        {"variant_id": "sprite_2l", "name": "2 Liter Bottle", "price": 3.50}
+      ]
+    },
+    {
+      "item_id": "des_501",
+      "name": "Tiramisu",
+      "category": "Desserts",
+      "description": "Classic Italian dessert made with ladyfingers, coffee, and mascarpone cheese.",
+      "allergens": ["dairy", "gluten", "egg"],
+      "is_vegetarian": true,
+      "spice_level": "none",
+      "tags": ["dessert", "sweet", "coffee", "italian"],
+      "variants": [
+        {"variant_id": "tiramisu_slice", "name": "Single Slice", "price": 6.00}
+      ]
+    },
+    {
+      "item_id": "des_502",
+      "name": "Warm Chocolate Lava Cake",
+      "category": "Desserts",
+      "description": "Rich chocolate cake with a molten chocolate center. Served warm.",
+      "allergens": ["dairy", "gluten", "egg"],
+      "is_vegetarian": true,
+      "spice_level": "none",
+      "tags": ["dessert", "sweet", "chocolate", "hot"],
+      "variants": [
+        {"variant_id": "lava_cake", "name": "Single Cake", "price": 7.00}
+      ]
+    }
+  ]
+}
